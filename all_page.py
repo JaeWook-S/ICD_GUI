@@ -9,7 +9,7 @@ import pandas as pd
 
 from first_page_function import on_browse_folder, on_gallery_select, list_subfolders, progress_bar, cycle_auto_calc, show_popup, hide_popup, update_progress_with_image_count, extract_first_images, inference
 from second_page_function import update_well_gallery, show_DIC_or_Graph, create_2d_mapping, page2_export_data_save, focusing_folder_save, plate_gallery_visible, is_selected_toggle, all_image_open, overlay_image_init
-from third_page_function import update_DIC_image, prev_stack, next_stack, get_stack_image_path, slider_position_change, update_slider, page3_export_data_save, update_ICD_Graph
+from third_page_function import update_DIC_image, prev_stack, next_stack, get_stack_image_path, slider_position_change, update_slider, page3_export_data_save, update_Graph_and_Peak
 
 BASE_DIR = os.path.abspath(os.getcwd())
     
@@ -103,8 +103,6 @@ def main_page():
                     with gr.Column(scale=1):               
                         gr.Markdown("# Progress")
                         model_processing_time = gr.HTML("<div class='progress-text'>Hello World!</div>")    
-                    # with gr.Column(scale=1):
-                    #     gr.Markdown("")
                 
                     with gr.Column():
                         gr.Markdown(value="\n# Analysis Protocol", elem_id="center-align")
@@ -402,6 +400,7 @@ def main_page():
 ############################
 # page 1 콜백 연결
 ############################
+
     information_plate_type.change(fn=plate_gallery_visible, inputs=[information_plate_type], outputs=[well_06, well_12, well_24, well_96])
     # (1) Total/Interval 변경 시 Cycle 자동 계산
     information_total_time_hour.change(cycle_auto_calc, inputs=[information_total_time_hour, information_total_time_min, information_interval_hour, information_interval_min], outputs=cycle_auto_calc_text)
@@ -415,7 +414,7 @@ def main_page():
     analysis_start_button.click(fn=show_popup, outputs=[start_popup, page1_overlay])
     start_yes_button.click(hide_popup, outputs=[start_popup, page1_overlay]).then(
                             fn=create_2d_mapping, inputs=[selected_folder], outputs=[well_stack_mapping_path]).then(
-                                fn=progress_bar,inputs=[well_stack_mapping_path], outputs=[model_processing_time, go_second_section]).then(fn=all_image_open, inputs=[well_stack_mapping_path], outputs=[well_stack_mapping_image])
+                                fn=progress_bar,inputs=[well_stack_mapping_path], outputs=[model_processing_time, go_second_section]).then(fn=all_image_open, inputs=[well_stack_mapping_path], outputs=[well_stack_mapping_image]) # 개선사항 : all_image_open도 progress bar에 반영해야함
                             
     start_no_button.click(hide_popup, outputs=[start_popup, page1_overlay])
 
@@ -432,7 +431,6 @@ def main_page():
 ############################
 # page 2 콜백 연결
 ############################
-    
     
     # 1페이지에서 분석 버튼 누르면 바로 초점 맞는 이미지 저장 + 갤러리 업데이트
     go_analysis_data_page2.click(fn=update_well_gallery, inputs=[well_stack_mapping_image], outputs=[well_gallery_06, well_gallery_12, well_gallery_24, well_gallery_96, original_gallery_image, overlay_gallery_image]) # 갤러리에 업데이트 되면 update_well_gallery 함수에서 바로 폴더 저장하는 함수 불러옴
@@ -454,16 +452,16 @@ def main_page():
     
     # 갤러리에서 아이템 선택 시 3페이지 이동 -> well 마다 각각 구현함 // but, selected_well toggle이 눌리면 3페이지로 이동 안하고 클릭 이벤트만 저장할 것 -> 추후 export button이 눌리면 그때 클릭 이벤트를 넘겨줄 예정
     well_gallery_06.select(fn=on_gallery_select, inputs=[well_stack_mapping_path, original_gallery_image, overlay_gallery_image, stack_index, export_select_well_toggle_state, selected_idx_for_export], outputs=[selected_well_folder, selected_well_label, stack_index, DIC_image, selected_well_markdown, selected_idx_for_export, well_gallery_06, page2_export_what_well]).then(
-        fn=update_ICD_Graph, inputs=[selected_well_label, cycle_auto_calc_text, stack_index], outputs=[ICD_graph]).then(fn=switch_page, inputs=[export_select_well_toggle_state], outputs=[page3, page2])
+        fn=update_Graph_and_Peak, inputs=[selected_well_label, cycle_auto_calc_text, stack_index], outputs=[ICD_graph, df_component]).then(fn=switch_page, inputs=[export_select_well_toggle_state], outputs=[page3, page2])
     
     well_gallery_12.select(fn=on_gallery_select, inputs=[well_stack_mapping_path, original_gallery_image, overlay_gallery_image, stack_index, export_select_well_toggle_state, selected_idx_for_export], outputs=[selected_well_folder, selected_well_label, stack_index, DIC_image, selected_well_markdown, selected_idx_for_export, well_gallery_12, page2_export_what_well]).then(
-        fn=update_ICD_Graph, inputs=[selected_well_label, cycle_auto_calc_text, stack_index], outputs=[ICD_graph]).then(fn=switch_page, inputs=[export_select_well_toggle_state], outputs=[page3, page2])
+        fn=update_Graph_and_Peak, inputs=[selected_well_label, cycle_auto_calc_text, stack_index], outputs=[ICD_graph, df_component]).then(fn=switch_page, inputs=[export_select_well_toggle_state], outputs=[page3, page2])
     
     well_gallery_24.select(fn=on_gallery_select, inputs=[well_stack_mapping_path, original_gallery_image, overlay_gallery_image, stack_index, export_select_well_toggle_state, selected_idx_for_export], outputs=[selected_well_folder, selected_well_label, stack_index, DIC_image, selected_well_markdown, selected_idx_for_export, well_gallery_24, page2_export_what_well]).then(
-        fn=update_ICD_Graph, inputs=[selected_well_label, cycle_auto_calc_text, stack_index], outputs=[ICD_graph]).then(fn=switch_page, inputs=[export_select_well_toggle_state], outputs=[page3, page2])
+        fn=update_Graph_and_Peak, inputs=[selected_well_label, cycle_auto_calc_text, stack_index], outputs=[ICD_graph, df_component]).then(fn=switch_page, inputs=[export_select_well_toggle_state], outputs=[page3, page2])
     
     well_gallery_96.select(fn=on_gallery_select, inputs=[well_stack_mapping_path, original_gallery_image, overlay_gallery_image, stack_index, export_select_well_toggle_state, selected_idx_for_export], outputs=[selected_well_folder, selected_well_label, stack_index, DIC_image, selected_well_markdown, selected_idx_for_export, well_gallery_96, page2_export_what_well]).then(
-        fn=update_ICD_Graph, inputs=[selected_well_label, cycle_auto_calc_text, stack_index], outputs=[ICD_graph]).then(fn=switch_page, inputs=[export_select_well_toggle_state], outputs=[page3, page2])
+        fn=update_Graph_and_Peak, inputs=[selected_well_label, cycle_auto_calc_text, stack_index], outputs=[ICD_graph, df_component]).then(fn=switch_page, inputs=[export_select_well_toggle_state], outputs=[page3, page2])
    
 
 ############################
@@ -477,10 +475,10 @@ def main_page():
 
     # # - Back 버튼 -> third_page_stack_index - 1 후 DIC 이미지 업데이트 + 그래프에서 점선 위치 변경
     page3_left_button.click(fn=prev_stack, inputs=stack_index, outputs=stack_index).then(fn=slider_position_change, inputs=[stack_index], outputs=[page3_time_slider]).then(fn=slider_position_change, inputs=[stack_index], outputs=[page2_time_slider]).then(
-        fn=update_DIC_image, inputs=[selected_well_folder, stack_index], outputs=DIC_image).then(fn=update_ICD_Graph, inputs=[selected_well_label, cycle_auto_calc_text, stack_index], outputs=[ICD_graph])
+        fn=update_DIC_image, inputs=[selected_well_folder, stack_index], outputs=DIC_image).then(fn=update_Graph_and_Peak, inputs=[selected_well_label, cycle_auto_calc_text, stack_index], outputs=[ICD_graph, df_component])
 
     # # - Next 버튼 -> third_page_stack_index + 1 후 DIC 이미지 업데이트 + 그래프에서 점선 위치 변경
     page3_right_button.click(fn=next_stack, inputs=[stack_index, cycle_auto_calc_text], outputs=stack_index).then(fn=slider_position_change, inputs=[stack_index], outputs=[page3_time_slider]).then(fn=slider_position_change, inputs=[stack_index], outputs=[page2_time_slider]).then(
-        fn=update_DIC_image, inputs=[selected_well_folder, stack_index], outputs=DIC_image).then(fn=update_ICD_Graph, inputs=[selected_well_label, cycle_auto_calc_text, stack_index], outputs=[ICD_graph])
+        fn=update_DIC_image, inputs=[selected_well_folder, stack_index], outputs=DIC_image).then(fn=update_Graph_and_Peak, inputs=[selected_well_label, cycle_auto_calc_text, stack_index], outputs=[ICD_graph, df_component])
     
     

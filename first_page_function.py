@@ -72,15 +72,15 @@ async def progress_bar(folder_path_dict):
         est_remaining = T * remaining if T else 0
         est_mins = int(est_remaining) // 60
         est_secs = int(est_remaining) % 60
-        est_time_str = f"{total-idx}장 이미지 - {est_mins}분 {est_secs}초 남음"
+        est_time_str = f"{total-idx}장 이미지 : {est_mins}분 {est_secs}초 남음"
 
         percent = int((idx / total) * 100)
-        bar = f'<div class="progress-text">Processing: [{"#"*(percent//10)}{" "*(10 - percent//10)}] {percent}% - {est_time_str}</div>'
+        bar = f'<div class="progress-text">Processing: [{"#"*(percent//2)}{" "*(50 - percent//2)}] {percent}%<br>- {est_time_str}</div>'
 
         yield bar, gr.update(visible=False)
         await asyncio.sleep(0.01)
 
-    progress_done_bar = '<div class="progress-text">Success!!: [##########] 100%</div>'
+    progress_done_bar = '<div class="progress-text">Data Inference Success!!<br>You can analysis. </div>'
     yield progress_done_bar, gr.update(visible=True)
 
 

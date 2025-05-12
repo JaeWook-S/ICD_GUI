@@ -96,7 +96,7 @@ def create_2d_mapping(selected_folder):
         # 4) 한 웰에 대한 스택-이미지 정보를 mapping에 저장
         mapping[well_name] = stack_dict
     
-    print(mapping)
+    #print(mapping)
     return mapping
     
 def update_well_gallery(well_stack_mapping_image, stack_index=0):

@@ -50,8 +50,18 @@ def get_stack_image_path(well_folder, stack_index):
     return os.path.join(bright_path, image_files[0])
 
 #############################
-# (2) DIC, Graph 이미지 업데이트 콜백
+# (2) DIC, Graph, DataFrame 업데이트 콜백
 #############################
+def update_peak_table(sc_peak_count, sc_peak_time, dc_peak_count, dc_peak_time):
+
+    data = {
+        "": ["SC", "DC"],
+        "Peak Count": [sc_peak_count, dc_peak_count],
+        "Peak Time": [sc_peak_time, dc_peak_time]
+    }
+
+    return pd.DataFrame(data)
+
 def update_DIC_image(well_data, stack_index: int):
     """
     well_data는 예: 
@@ -72,7 +82,7 @@ def update_DIC_image(well_data, stack_index: int):
             # 없으면 placeholder
         return "https://via.placeholder.com/128?text=No+Image"
     
-def update_ICD_Graph(well_label, cycle, stack_idx: int):
+def update_Graph_and_Peak(well_label, cycle, stack_idx: int):
     # well label에 맞는 그래프 가져오기  -> 구현 필요 // 임시로 temp_graph넣엇음
     # stack_idx는 현재 어느 위치인지 표시를 위해 // cycle은 현재 몇번째 interval인지 표시를 위해 (ex. cycle = '24 Cycle')
     cycle = int(cycle.split()[0])
@@ -82,6 +92,16 @@ def update_ICD_Graph(well_label, cycle, stack_idx: int):
     sc = np.array([10, 12, 15, 20, 25, 30, 40, 55, 60, 70, 50, 30, 20, 10, 5, 4, 3, 3, 2, 2, 2, 2, 2, 2])
     dc = np.array([15, 18, 20, 25, 30, 40, 60, 100, 150, 200, 300, 310, 320, 310, 300, 290, 295, 300, 305, 300, 290, 280, 275, 270])
     
+    ##################################################################################################################################################
+    # peak 에 대한 dataframe 변경
+    sc_peak_count = f"{sc.max()} Cell"; sc_peak_time = f"{sc.argmax()} Cycle"
+
+    dc_peak_count = f"{dc.max()} Cell"; dc_peak_time = f"{dc.argmax()} Cycle"
+    
+    peak_data = update_peak_table(sc_peak_count, sc_peak_time, dc_peak_count, dc_peak_time)
+    
+    ###################################################################################################################################################
+    # 그래프 시각화
     fig, ax = plt.subplots(figsize=(16, 12))
     
     ax.plot(time, sc, color='green', label='pred_S.C', marker='o', linewidth=5)
@@ -99,7 +119,7 @@ def update_ICD_Graph(well_label, cycle, stack_idx: int):
     plt.tight_layout()
 
     plt.close(fig)
-    return fig
+    return fig, peak_data
 
     
 #############################
