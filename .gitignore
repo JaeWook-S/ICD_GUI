@@ -1,0 +1,17 @@
+__pycache__/
+.gradio/
+data_with_GFP_RFP/
+model/__pycache__/
+model/cell_detection_part/
+model/GFP_ResCNN/__pycache__/
+model/GFP_ResCNN/.ipynb_checkpoints/
+model/GFP_ResCNN/checkpoints/
+model/GFP_ResCNN/data/
+model/GFP_ResCNN/model
+
+model/RFP_ResCNN/__pycache__/
+model/RFP_ResCNN/.ipynb_checkpoints/
+model/RFP_ResCNN/checkpoints/
+model/RFP_ResCNN/data/
+model/RFP_ResCNN/model
+image_preprocessing.ipynb
