@@ -14,11 +14,13 @@ import model.RFP_ResCNN.test
 
 BASE_DIR = os.path.abspath(os.getcwd())
 
+def what_folder_type(): return gr.State(value=True), gr.State(value=False)
 def show_popup(): return gr.update(visible=True), gr.update(visible=True)
 def hide_popup(): return gr.update(visible=False), gr.update(visible=False)
 def switch_page(): return gr.update(visible=False), gr.update(visible=True)
 def switch_to_third_page(): return gr.update(visible=False), gr.update(visible=True)
 
+# 폴더 처리 함수
 def on_browse_folder():
     root = Tk()
     root.attributes("-topmost", True)
@@ -30,6 +32,7 @@ def on_browse_folder():
     return BASE_DIR  # 선택하지 않을 경우 기본 디렉토리 반환
 
 def list_subfolders(folder):
+
     # 선택한 폴더가 유효하지 않으면 fallback 디렉토리로 FileExplorer 생성
     if not folder or not os.path.isdir(folder):
         return  gr.FileExplorer(root_dir=BASE_DIR, label="Subfolders", file_count="multiple", elem_id="upload-content")
@@ -39,6 +42,7 @@ def list_subfolders(folder):
         print(f"Error updating FileExplorer: {e}")
         return gr.FileExplorer(root_dir=BASE_DIR, label="Subfolders", file_count="multiple", elem_id="upload-content")
 
+# 모델 inference 및 진행바 함수
 def inference(image):
     model.GFP_ResCNN.test.test(image)
     model.RFP_ResCNN.test.test(image)
@@ -51,46 +55,50 @@ def extract_image_paths(folder_path_dict):
 
     return image_paths
 
-async def progress_bar(folder_path_dict):
+async def progress_bar(folder_path_dict, import_selected_folder):
     image_paths = extract_image_paths(folder_path_dict)
     total = len(image_paths)
+    batch_size = 10
+    num_batches = (total + batch_size - 1) // batch_size  # ceil
 
-    T = None  # 첫 이미지 처리 시간 저장
+    T = None  # 첫 배치 처리 시간 저장
+    if import_selected_folder != BASE_DIR: # 초기 폴더일 때만 inference 진행
+        for batch_idx in range(num_batches):
+            batch = image_paths[batch_idx*batch_size : (batch_idx+1)*batch_size]
 
-    for idx, image_path in enumerate(image_paths, 1):
-        if idx == 1:
-            t_start = time.perf_counter()
+            if batch_idx == 0:
+                t_start = time.perf_counter()
 
-        inference(image_path)
+            #inference(batch)
 
-        if idx == 1:
-            t_end = time.perf_counter()
-            T = t_end - t_start
-            total_est_time = T * total
+            if batch_idx == 0:
+                t_end = time.perf_counter()
+                T = t_end - t_start
+                total_est_time = T * num_batches
 
-        remaining = total - idx
-        est_remaining = T * remaining if T else 0
-        est_mins = int(est_remaining) // 60
-        est_secs = int(est_remaining) % 60
-        est_time_str = f"{total-idx}장 이미지 : {est_mins}분 {est_secs}초 남음"
+            remaining_batches = num_batches - batch_idx - 1
+            est_remaining = T * remaining_batches if T else 0
+            est_mins = int(est_remaining) // 60
+            est_secs = int(est_remaining) % 60
+            est_time_str = f"{total - (batch_idx+1)*batch_size}장 이미지 : {est_mins}분 {est_secs}초 남음"
 
-        percent = int((idx / total) * 100)
-        bar = f'<div class="progress-text">Processing: [{"#"*(percent//2)}{" "*(50 - percent//2)}] {percent}%<br>- {est_time_str}</div>'
+            percent = int(((batch_idx+1) * batch_size / total) * 100)
+            bar = f'<div class="progress-text">Processing: [{"#"*(percent//2)}{" "*(50 - percent//2)}] {percent}%<br>- {est_time_str}</div>'
 
-        yield bar, gr.update(visible=False)
-        await asyncio.sleep(0.01)
-
+            yield bar, gr.update(visible=False)
+            await asyncio.sleep(0.01)
+            
     progress_done_bar = '<div class="progress-text">Data Inference Success!!<br>You can analysis. </div>'
     yield progress_done_bar, gr.update(visible=True)
 
-
-    
+# cycle 자동 계산 함수
 def cycle_auto_calc(total_hour, total_min, interval_hour, interval_min):
     total_time = total_hour + (total_min / 60)
     interval_time = interval_hour + (interval_min / 60)
     if interval_time == 0:
         return "0 Cycle"
     return str(int(round(total_time / interval_time, 2))) + " Cycle"
+
 
 def update_progress_with_image_count(uploaded_folder):
     if not uploaded_folder:
@@ -139,7 +147,7 @@ def extract_first_images(input_dir: str, output_dir: str):
             shutil.copy2(src, dst)
             print(f"Copied {src} -> {dst}")
 
-def on_gallery_select(selected_value: gr.SelectData, mapping, origin_gallery, overlay_gallery, stack_index, selected_well_toggle_state, selected_idx):
+def on_gallery_select(selected_value: gr.SelectData, mapping, origin_gallery, overlay_gallery, stack_index, selected_well_toggle_state, selected_idx, pseudo_color_toggle):
     """
     갤러리에서 이미지를 클릭했을 때 호출되는 콜백.
     'mapping'은 { well_label: well_folder_path } 형태의 딕셔너리라고 가정.
@@ -172,5 +180,5 @@ def on_gallery_select(selected_value: gr.SelectData, mapping, origin_gallery, ov
             return None, None, None, None, None, selected_idx, origin_gallery, gr.update(value="All Wells")
 
         # update_DIC_image( )가 내부에서 "well_folder/POINT00001/BRIGHT/STACK_{index:05d}" 로 접근
-        return well_folder, well_label, stack_index, update_DIC_image(well_folder, stack_index), gr.update(value=f"""<div style='font-size: 80px; font-weight: bold; text-align: left; margin: 0 auto; width: 100px'> {well_label} </div>"""), selected_idx, origin_gallery, gr.update(value="All Wells")
+        return well_folder, well_label, stack_index, update_DIC_image(pseudo_color_toggle, well_folder, stack_index), gr.update(value=f"""<div style='font-size: 80px; font-weight: bold; text-align: left; margin: 0 auto; width: 100px'> {well_label} </div>"""), selected_idx, origin_gallery, gr.update(value="All Wells")
 

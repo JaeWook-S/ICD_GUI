@@ -8,8 +8,8 @@ from PIL import Image
 BASE_DIR = os.path.abspath(os.getcwd())
 
 
-
 def show_DIC_or_Graph(): return gr.State(value=False), gr.State(value=True)
+
 
 def is_selected_toggle(state, selected_idx):
     if state == False:
@@ -56,22 +56,33 @@ def all_image_open(well_stack_mapping_path):
         
     return well_stack_mapping_images
 
-def create_2d_mapping(selected_folder):
+def create_2d_mapping(selected_folder, import_selected_folder): # is_import_folder가 true이면 import_selected_folder로 매핑 시작
     """
     root_folder는 사용자가 Browse로 선택한 폴더(= selected_folder)
     그 내부에는 A01 ~ H12 등 96개의 폴더가 있고,
     각 폴더 밑에 POINT 00001/BRIGHT/STACK_00000 ~ STACK_00023 존재한다고 가정.
     """
     mapping = {}
+    
+    if import_selected_folder != BASE_DIR:
+        # 1) 웰 폴더(A01 ~ H12) 찾기
+        well_folders = [
+            d for d in sorted(os.listdir(import_selected_folder))
+            if os.path.isdir(os.path.join(import_selected_folder, d))
+        ]
+    else:
+        # 1) 웰 폴더(A01 ~ H12) 찾기
+        well_folders = [
+            d for d in sorted(os.listdir(selected_folder))
+            if os.path.isdir(os.path.join(selected_folder, d))
+        ]
 
-    # 1) 웰 폴더(A01 ~ H12) 찾기
-    well_folders = [
-        d for d in sorted(os.listdir(selected_folder))
-        if os.path.isdir(os.path.join(selected_folder, d))
-    ]
-
+    
     for well_name in well_folders:
-        well_path = os.path.join(selected_folder, well_name)
+        if import_selected_folder != BASE_DIR:
+            well_path = os.path.join(import_selected_folder, well_name)
+        else:    
+            well_path = os.path.join(selected_folder, well_name)
         
         # 2) 스택별 이미지 경로 수집
         stack_dict = {}
@@ -160,8 +171,6 @@ def page2_export_data_save(all_well_image, stack_index, page2_export_what_well, 
         pass
     
     return "All Wells", None, None, None, None # 저장을 누르면 선택된 것 초기화
-
-
 
 def focusing_folder_save(well_stack_mapping):
     

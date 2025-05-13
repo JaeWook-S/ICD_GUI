@@ -6,11 +6,10 @@ from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
 
+from model.merge_GFP_RFP import merge_dic_gfp_rfp
 
 def show_popup(): return gr.update(visible=True), gr.update(visible=True)
-
 def hide_popup(): return gr.update(visible=False), gr.update(visible=False)
-
 def slider_position_change(index): return gr.update(value=index+1)
 
 
@@ -62,7 +61,7 @@ def update_peak_table(sc_peak_count, sc_peak_time, dc_peak_count, dc_peak_time):
 
     return pd.DataFrame(data)
 
-def update_DIC_image(well_data, stack_index: int):
+def update_DIC_image(pseudo_color_toggle, well_data, stack_index: int):
     """
     well_data는 예: 
     {
@@ -72,15 +71,18 @@ def update_DIC_image(well_data, stack_index: int):
     }
     """
     #print(stack_index)
-    # 스택 폴더 이름
-    image_list = well_data.get(f"STACK_{str(stack_index).zfill(5)}", [])
-
-    if image_list: 
-            # 있으면 첫 이미지를 썸네일로
-        return image_list[0]
+    if pseudo_color_toggle:
+        return merge_GFP_RFP(pseudo_color_toggle, well_data, stack_index)
+    
     else:
-            # 없으면 placeholder
-        return "https://via.placeholder.com/128?text=No+Image"
+        image_list = well_data.get(f"STACK_{str(stack_index).zfill(5)}", [])
+
+        if image_list: 
+                # 있으면 첫 이미지를 썸네일로
+            return image_list[0]
+        else:
+                # 없으면 placeholder
+            return "https://via.placeholder.com/128?text=No+Image"
     
 def update_Graph_and_Peak(well_label, cycle, stack_idx: int):
     # well label에 맞는 그래프 가져오기  -> 구현 필요 // 임시로 temp_graph넣엇음
@@ -121,7 +123,22 @@ def update_Graph_and_Peak(well_label, cycle, stack_idx: int):
     plt.close(fig)
     return fig, peak_data
 
+def merge_GFP_RFP(pseudo_color_toggle, well_data, stack_index: int):
+    if pseudo_color_toggle == True: # 토글이 된 상태면 GFP, RFP 병합
+        
+        image_list = well_data.get(f"STACK_{str(stack_index).zfill(5)}", [])
+        
+        if image_list:
+            DIC_image = image_list[0]; GFP_image = image_list[1]; RFP_image = image_list[2]
+            return merge_dic_gfp_rfp(DIC_image, GFP_image, RFP_image)
+            
+        else:
+            return "https://via.placeholder.com/128?text=No+Image"
+            
+    else: # 그렇지 않으면 그냥 DIC 이미지만 
+        return update_DIC_image(pseudo_color_toggle, well_data, stack_index)
     
+
 #############################
 # (3) stack_index 조절 함수
 #############################
