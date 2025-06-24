@@ -64,20 +64,19 @@ def create_2d_mapping(selected_folder, import_selected_folder): # is_import_fold
     """
     mapping = {}
     
-    if import_selected_folder != BASE_DIR:
+    if import_selected_folder != BASE_DIR and selected_folder == BASE_DIR:
         # 1) 웰 폴더(A01 ~ H12) 찾기
         well_folders = [
             d for d in sorted(os.listdir(import_selected_folder))
             if os.path.isdir(os.path.join(import_selected_folder, d))
         ]
-    else:
+    elif import_selected_folder == BASE_DIR and selected_folder != BASE_DIR:
         # 1) 웰 폴더(A01 ~ H12) 찾기
         well_folders = [
             d for d in sorted(os.listdir(selected_folder))
             if os.path.isdir(os.path.join(selected_folder, d))
         ]
 
-    
     for well_name in well_folders:
         if import_selected_folder != BASE_DIR:
             well_path = os.path.join(import_selected_folder, well_name)

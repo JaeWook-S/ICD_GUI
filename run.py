@@ -139,9 +139,9 @@ css = """
 
 /* 1~3번 컬럼( col1, col2, col3 )은 10px 폭으로 강제 */
 #col0, #col1, #col2, #col3 {
-    max-width: 50px !important;
-    min-width: 50px !important;
-    width: 50px !important;
+    max-width: 120px !important;
+    min-width: 120px !important;
+    width: 120px !important;
     flex: 0 0 auto !important; /* flex 확장 방지 */
     overflow: hidden !important;
     margin: 0 !important;
@@ -173,26 +173,6 @@ css = """
 }
 #col0 .gr-button:hover, #col1 .gr-button:hover, #col2 .gr-button:hover, #col3 .gr-button:hover {
     background-color: transparent !important;
-}
-
-#my_slider input[type="range"]::-webkit-slider-runnable-track {
-    height: 8px;
-    border-radius: 8px;
-    background: repeating-linear-gradient(
-        to right,
-        black 0px,
-        black 5px,
-        transparent 5px,
-        transparent 10px
-    );
-}
-#my_slider input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: #ccc;
-    margin-top: -4px;
 }
 
 """

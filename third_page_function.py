@@ -5,8 +5,8 @@ import shutil
 from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
-
-from model.merge_GFP_RFP import merge_dic_gfp_rfp
+import json
+from model.visualization_detection import visualize_detections
 
 def show_popup(): return gr.update(visible=True), gr.update(visible=True)
 def hide_popup(): return gr.update(visible=False), gr.update(visible=False)
@@ -61,83 +61,132 @@ def update_peak_table(sc_peak_count, sc_peak_time, dc_peak_count, dc_peak_time):
 
     return pd.DataFrame(data)
 
-def update_DIC_image(pseudo_color_toggle, well_data, stack_index: int):
+def update_DIC_image(pseudo_color_toggle, sc_toggle, dc_toggle, well_data, stack_index: int):
     """
-    well_data는 예: 
+    well_data: 
     {
       "STACK_00000": [...이미지 경로들...],
-      "STACK_00001": [...],
       ...
     }
     """
-    #print(stack_index)
-    if pseudo_color_toggle:
-        return merge_GFP_RFP(pseudo_color_toggle, well_data, stack_index)
-    
+    image_list = well_data.get(f"STACK_{str(stack_index).zfill(5)}", [])
+
+    def placeholder():
+        return "https://via.placeholder.com/128?text=No+Image"
+
+    def load_dic_image():
+        if not image_list:
+            return placeholder()
+        return Image.open(image_list[0]).convert("RGB")
+
+    # Determine label mode
+    if sc_toggle and dc_toggle:
+        label_mode = "both"
+    elif sc_toggle:
+        label_mode = "sc"
+    elif dc_toggle:
+        label_mode = "dc"
     else:
-        image_list = well_data.get(f"STACK_{str(stack_index).zfill(5)}", [])
+        label_mode = None
 
-        if image_list: 
-                # 있으면 첫 이미지를 썸네일로
-            return image_list[0]
-        else:
-                # 없으면 placeholder
-            return "https://via.placeholder.com/128?text=No+Image"
+    # Choose base image
+    if pseudo_color_toggle:
+        base_image = show_merge_GFP_RFP(well_data, stack_index)
+    else:
+        if not image_list:
+            return placeholder()
+        base_image = load_dic_image()
+
+    # Add labels if needed
+    if label_mode:
+        return show_cell_label(label_mode, base_image, well_data, stack_index)
     
-def update_Graph_and_Peak(well_label, cycle, stack_idx: int):
-    # well label에 맞는 그래프 가져오기  -> 구현 필요 // 임시로 temp_graph넣엇음
-    # stack_idx는 현재 어느 위치인지 표시를 위해 // cycle은 현재 몇번째 interval인지 표시를 위해 (ex. cycle = '24 Cycle')
+    return base_image if pseudo_color_toggle else image_list[0]
+
+
+    
+def count_stack_by_class(detections, stack_len):
+    stack_keys = [f"STACK_{str(i).zfill(5)}" for i in range(stack_len)]
+    return [sum(1 for d in detections if d["image_id"] == key) for key in stack_keys]
+
+
+def update_Graph_and_Peak(well_data, cycle, stack_idx: int):
     cycle = int(cycle.split()[0])
-    time = np.arange(0, int(cycle), 1) 
-    
-    # 예시 데이터 -> 여기에 모델 예측한 값 넣으면 됨
-    sc = np.array([10, 12, 15, 20, 25, 30, 40, 55, 60, 70, 50, 30, 20, 10, 5, 4, 3, 3, 2, 2, 2, 2, 2, 2])
-    dc = np.array([15, 18, 20, 25, 30, 40, 60, 100, 150, 200, 300, 310, 320, 310, 300, 290, 295, 300, 305, 300, 290, 280, 275, 270])
-    
-    ##################################################################################################################################################
-    # peak 에 대한 dataframe 변경
-    sc_peak_count = f"{sc.max()} Cell"; sc_peak_time = f"{sc.argmax()} Cycle"
+    time = np.arange(0, int(cycle), 1)
 
-    dc_peak_count = f"{dc.max()} Cell"; dc_peak_time = f"{dc.argmax()} Cycle"
-    
+    # JSON 경로 추출
+    first_key = next(iter(well_data))
+    first_path = well_data[first_key][0]
+    json_path = os.path.dirname(os.path.dirname(first_path))
+
+    stack_len = len(well_data)
+
+    # SC 예측 수
+    try:
+        with open(os.path.join(json_path, 'best_predictions_GFP.json'), 'r') as f:
+            detections_sc = json.load(f)
+        sc = np.array(count_stack_by_class(detections_sc, stack_len))
+    except FileNotFoundError:
+        print("[INFO] GFP json 파일 없음 → SC 전부 0으로 처리")
+        sc = np.zeros(stack_len)
+
+    # DC 예측 수
+    try:
+        with open(os.path.join(json_path, 'best_predictions_RFP.json'), 'r') as f:
+            detections_dc = json.load(f)
+        dc = np.array(count_stack_by_class(detections_dc, stack_len))
+    except FileNotFoundError:
+        print("[INFO] RFP json 파일 없음 → DC 전부 0으로 처리")
+        dc = np.zeros(stack_len)
+
+    # peak 정보
+    sc_peak_count = f"{sc.max()} Cell"
+    sc_peak_time = f"{sc.argmax()} Cycle"
+    dc_peak_count = f"{dc.max()} Cell"
+    dc_peak_time = f"{dc.argmax()} Cycle"
     peak_data = update_peak_table(sc_peak_count, sc_peak_time, dc_peak_count, dc_peak_time)
-    
-    ###################################################################################################################################################
-    # 그래프 시각화
+
+    # 시각화
     fig, ax = plt.subplots(figsize=(16, 12))
-    
     ax.plot(time, sc, color='green', label='pred_S.C', marker='o', linewidth=5)
     ax.plot(time, dc, color='red', label='pred_D.C', marker='s', linewidth=5)
 
-    # 수직선 추가: stack_idx에서 더 높은 값을 기준으로 선 높이 결정
     min_y, max_y = min(sc[stack_idx], dc[stack_idx]), max(sc[stack_idx], dc[stack_idx])
-    ax.vlines(stack_idx, min_y, max_y, colors='black', linestyles='dashed', linewidth=5) # 현재 interval의 선 표시
-    ax.plot(stack_idx, min_y, 'o', color='white', markersize=10, markeredgecolor='black', zorder=5) # 현재 interval의 그래프 위의 SC,DC 하얀 동그라미 표시
+    ax.vlines(stack_idx, min_y, max_y, colors='black', linestyles='dashed', linewidth=5)
+    ax.plot(stack_idx, min_y, 'o', color='white', markersize=10, markeredgecolor='black', zorder=5)
     ax.plot(stack_idx, max_y, 'o', color='white', markersize=10, markeredgecolor='black', zorder=5)
-    
-    ax.set_xticks(time) # x축 눈금 0~cycle까지 설정
-    ax.legend(fontsize=16)# 범례 및 레이아웃
+
+    ax.set_xticks(time)
+    ax.legend(fontsize=16)
     ax.grid(False)
     plt.tight_layout()
-
     plt.close(fig)
+
     return fig, peak_data
 
-def merge_GFP_RFP(pseudo_color_toggle, well_data, stack_index: int):
-    if pseudo_color_toggle == True: # 토글이 된 상태면 GFP, RFP 병합
-        
-        image_list = well_data.get(f"STACK_{str(stack_index).zfill(5)}", [])
-        
-        if image_list:
-            DIC_image = image_list[0]; GFP_image = image_list[1]; RFP_image = image_list[2]
-            return merge_dic_gfp_rfp(DIC_image, GFP_image, RFP_image)
-            
-        else:
-            return "https://via.placeholder.com/128?text=No+Image"
-            
-    else: # 그렇지 않으면 그냥 DIC 이미지만 
-        return update_DIC_image(pseudo_color_toggle, well_data, stack_index)
+
+def show_merge_GFP_RFP(well_data, stack_index: int):
+
+    image_list = well_data.get(f"STACK_{str(stack_index).zfill(5)}", [])
     
+    if image_list:
+        path = image_list[3]
+        image = Image.open(path).convert("RGB")
+        return image
+        
+    else:
+        return "https://via.placeholder.com/128?text=No+Image"
+
+    
+def show_cell_label(label_mode, current_image, well_data, stack_index: int):
+    
+    first_key = next(iter(well_data))
+    first_path = well_data[first_key][0] # well_data dictionary에서 맨 앞 경로 추출
+    
+    json_path = os.path.dirname(os.path.dirname(first_path)) # json이 있는 경로
+    
+    return visualize_detections(label_mode, current_image, json_path, stack_index)
+ 
 
 #############################
 # (3) stack_index 조절 함수

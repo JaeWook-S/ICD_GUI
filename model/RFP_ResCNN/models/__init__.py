@@ -1,4 +1,4 @@
-def create_model(opt):
+def RFP_create_model(opt):
     model = None
     #print(opt.model)
     if opt.model == 'resvit_many':

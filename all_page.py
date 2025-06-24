@@ -7,9 +7,9 @@ import shutil
 from gradio_toggle import Toggle
 import pandas as pd
 
-from first_page_function import on_browse_folder, on_gallery_select, list_subfolders, progress_bar, cycle_auto_calc, show_popup, hide_popup, update_progress_with_image_count, extract_first_images, inference, what_folder_type
-from second_page_function import update_well_gallery, show_DIC_or_Graph, create_2d_mapping, page2_export_data_save, focusing_folder_save, plate_gallery_visible, is_selected_toggle, all_image_open, overlay_image_init
-from third_page_function import update_DIC_image, prev_stack, next_stack, get_stack_image_path, slider_position_change, update_slider, page3_export_data_save, update_Graph_and_Peak, merge_GFP_RFP
+from first_page_function import on_browse_folder, on_gallery_select, list_subfolders, inference_progress_bar, cycle_auto_calc, show_popup, hide_popup, update_progress_with_image_count, extract_first_images, what_folder_type, reset_init_or_import_folder, check_information_val
+from second_page_function import update_well_gallery, show_DIC_or_Graph, create_2d_mapping, page2_export_data_save, focusing_folder_save, plate_gallery_visible, is_selected_toggle, overlay_image_init
+from third_page_function import update_DIC_image, prev_stack, next_stack, get_stack_image_path, slider_position_change, update_slider, page3_export_data_save, update_Graph_and_Peak, show_merge_GFP_RFP, show_cell_label
 
 BASE_DIR = os.path.abspath(os.getcwd())
     
@@ -35,6 +35,8 @@ def main_page():
     selected_folder = gr.State(value=BASE_DIR)
     import_selected_folder = gr.State(value=BASE_DIR)
     
+    information_select_complete = gr.State(value=False) # 정보들이 다 입력 전에 분석을 시작하려고 할때 경고문구를 위한 변수
+    
 ######################### 
 #######  page 1 #########
 #########################
@@ -51,23 +53,15 @@ def main_page():
         with gr.Column():
             with gr.Row():# 업로더 및 information
                 ######################################################## folder uploader ############################################################
-                
                 with gr.Column(scale=1):
                     init_browse_button = gr.Button("Browse", elem_id="analysis-browse-button")
                     # 초기 FileExplorer 생성 (출력 대상은 init_upload_folder)
                     init_upload_folder = gr.FileExplorer(root_dir=BASE_DIR, show_label=False, file_count="multiple", elem_id="upload-content")
-                    # Browse 버튼 클릭 시 선택 폴더를 업데이트
-                    init_browse_button.click(fn=on_browse_folder, inputs=[], outputs=selected_folder)
-                    # 선택된 폴더 변경 시 FileExplorer 자체를 새 인스턴스로 반환하여 교체
-                    selected_folder.change(fn=list_subfolders, inputs=selected_folder, outputs=[init_upload_folder])
-                
+
                 with gr.Column(scale=1):
                     import_browse_button = gr.Button("Browse", elem_id="analysis-browse-button")
                     import_upload_folder = gr.FileExplorer(root_dir=BASE_DIR, show_label=False, file_count="multiple", elem_id="upload-content")
-                    import_browse_button.click(fn=on_browse_folder, inputs=[], outputs=import_selected_folder)
-                    # 선택된 폴더 변경 시 FileExplorer 자체를 새 인스턴스로 반환하여 교체
-                    import_selected_folder.change(fn=list_subfolders, inputs=import_selected_folder, outputs=[import_upload_folder])
-                
+
                 ####################################################### information part #############################################################
                 with gr.Column(scale=2):
                     with gr.Column(elem_id="information-content"):
@@ -102,7 +96,7 @@ def main_page():
                 with gr.Row(): 
                     with gr.Column(scale=1):               
                         gr.Markdown("# Progress")
-                        model_processing_time = gr.HTML("<div class='progress-text'>Hello World!</div>")    
+                        model_processing_time = gr.HTML("<div class='progress-text'>ICD 정보 분석을 위해 오신 것을 환영합니다!</div>")    
                 
                     with gr.Column():
                         gr.Markdown(value="\n# Analysis Protocol", elem_id="center-align")
@@ -136,17 +130,25 @@ def main_page():
         page1_overlay = gr.Markdown("", elem_id="overlay", visible=False)
         start_popup = gr.Column(visible=False, elem_id="popup-container")
         cancel_popup = gr.Column(visible=False, elem_id="popup-container")
+        information_error_popup = gr.Column(visible=False, elem_id="popup-container")
+        
         with start_popup:
             gr.Markdown("### 분석을 진행할까요? \n ### 시간이 오래 걸릴 수 있습니다.")
             with gr.Row():
                 start_yes_button = gr.Button("예")
                 start_no_button = gr.Button("아니오")
+                
         with cancel_popup:
             gr.Markdown("### 정말로 중단하시나요? \n ### 프로그램이 중단됩니다.")
             with gr.Row():
                 cancel_yes_button = gr.Button("예")
                 cancel_no_button = gr.Button("아니오")
     
+        with information_error_popup:
+            gr.Markdown("### Error : 오른쪽 정보를 모두 입력하세요.")
+            with gr.Row():
+                information_error_yes_button = gr.Button("OK")
+
     
     
 ######################### 
@@ -156,7 +158,7 @@ def main_page():
     overlay_gallery_image = gr.State()
     
     with gr.Column(visible=False) as page2:
-                # Gradio 상태 변수
+        # Gradio 상태 변수
         stack_index = gr.State(0)
         export_select_well_toggle_state = gr.State(False)
         selected_idx_for_export = gr.State([])
@@ -294,24 +296,31 @@ def main_page():
                         )
             
         ###################################### 1페이지로 전환 ################################################
+
         with gr.Row():
             # 1페이지로 변경(최대/최소 10px)
+            with gr.Column(elem_id="col0"):
+                pass
+            # with gr.Column(elem_id="col0"):
+            #     pass
             with gr.Column(elem_id="col2"):
                 second_to_first_page = gr.Button("HOME") 
                 second_to_first_page.click(fn=switch_page, outputs=[page1, page2])
+                
             # 왼쪽 이미지 - 첫 번째 컬럼(최대/최소 10px)
             with gr.Column(elem_id="col1"):
                 page2_left_button = gr.Button("LEFT")
-                
             # 오른쪽 이미지 - 세 번째 컬럼(최대/최소 10px)  
+            
             with gr.Column(elem_id="col3"):
                 page2_right_button = gr.Button("RIGHT")
-    
+                
             # 네 번째 컬럼(남은 공간)
             with gr.Column(elem_id="col4"):
                 with gr.Row():
-                    #gr.Markdown("## A")
+                    page2_present_stack = gr.Markdown("# 00000 (0 hr)")
                     page2_time_slider = gr.Slider(minimum=1, maximum=24, value=1, step=1, interactive=False, show_reset_button=False)
+
         
 
 
@@ -401,6 +410,11 @@ def main_page():
 # page 1 콜백 연결
 ############################
 
+    # Browse 버튼 클릭 시 선택 폴더를 업데이트
+    init_browse_button.click(fn=on_browse_folder, inputs=[], outputs=selected_folder).then(fn=list_subfolders, inputs=selected_folder, outputs=[init_upload_folder]).then(fn=reset_init_or_import_folder, outputs=[import_selected_folder, import_upload_folder])
+    import_browse_button.click(fn=on_browse_folder, inputs=[], outputs=import_selected_folder).then(fn=list_subfolders, inputs=import_selected_folder, outputs=[import_upload_folder]).then(reset_init_or_import_folder, outputs=[selected_folder, init_upload_folder])
+
+    
     information_plate_type.change(fn=plate_gallery_visible, inputs=[information_plate_type], outputs=[well_06, well_12, well_24, well_96])
     # (1) Total/Interval 변경 시 Cycle 자동 계산
     information_total_time_hour.change(cycle_auto_calc, inputs=[information_total_time_hour, information_total_time_min, information_interval_hour, information_interval_min], outputs=cycle_auto_calc_text)
@@ -411,16 +425,22 @@ def main_page():
     cycle_auto_calc_text.change(fn=update_slider, inputs=[cycle_auto_calc_text], outputs=[page3_time_slider])
     
     # (2) START 버튼 클릭 시 팝업 표시 및 progress_bar 실행
-    analysis_start_button.click(fn=show_popup, outputs=[start_popup, page1_overlay])
+    analysis_start_button.click(fn=check_information_val, inputs=[information_plate_type, information_total_time_hour, information_interval_hour, analysis_protocol_SC, analysis_protocol_DC], outputs=[information_select_complete]).then(
+                                fn=show_popup, inputs=[information_select_complete], outputs=[information_error_popup, start_popup, page1_overlay])
+    
+    information_error_yes_button.click(hide_popup, outputs=[information_error_popup, page1_overlay])    
+    
     start_yes_button.click(hide_popup, outputs=[start_popup, page1_overlay]).then(
                             fn=create_2d_mapping, inputs=[selected_folder, import_selected_folder], outputs=[well_stack_mapping_path]).then(
-                                fn=progress_bar,inputs=[well_stack_mapping_path, import_selected_folder], outputs=[model_processing_time, go_second_section]).then(fn=all_image_open, inputs=[well_stack_mapping_path], outputs=[well_stack_mapping_image]) # 개선사항 : all_image_open도 progress bar에 반영해야함
+                                fn=inference_progress_bar,inputs=[well_stack_mapping_path, import_selected_folder, analysis_protocol_SC, analysis_protocol_DC, cycle_auto_calc_text], outputs=[model_processing_time, go_second_section, well_stack_mapping_image]).then(
+                            fn=create_2d_mapping, inputs=[selected_folder, import_selected_folder], outputs=[well_stack_mapping_path])
                                 # create_2d_mapping에서 import folder면 import_selected_folder 내의 이미지를 가져오도록 설정
                                 # progress_bar에서 inference를 하는데 만약 import folder이면 inference 안함
+                                # inference 한 뒤에 맵핑을 다시 해주고 merge이미지 경로가 생성될 수 있도록 함
     start_no_button.click(hide_popup, outputs=[start_popup, page1_overlay])
 
     # (3) CANCEL 버튼 클릭 시 팝업 표시
-    analysis_cancel_button.click(fn=show_popup, outputs=[cancel_popup, page1_overlay])
+    analysis_cancel_button.click(fn=show_popup, inputs=[gr.State(True)], outputs=[information_error_popup, cancel_popup, page1_overlay])
     cancel_yes_button.click(hide_popup, outputs=[cancel_popup, page1_overlay])
     cancel_no_button.click(hide_popup, outputs=[cancel_popup, page1_overlay])
 
@@ -452,17 +472,18 @@ def main_page():
     page2_save_button.click(fn=hide_popup, outputs=[page2_export_popup, page2_overlay]).then(fn=page2_export_data_save, inputs=[well_stack_mapping_path, stack_index, page2_export_what_well, page2_vis_main, page2_vis_format, page2_graph_main, page2_graph_format], outputs=[page2_export_what_well, page2_vis_main, page2_vis_format, page2_graph_main, page2_graph_format])
     
     # 갤러리에서 아이템 선택 시 3페이지 이동 -> well 마다 각각 구현함 // but, selected_well toggle이 눌리면 3페이지로 이동 안하고 클릭 이벤트만 저장할 것 -> 추후 export button이 눌리면 그때 클릭 이벤트를 넘겨줄 예정
-    well_gallery_06.select(fn=on_gallery_select, inputs=[well_stack_mapping_path, original_gallery_image, overlay_gallery_image, stack_index, export_select_well_toggle_state, selected_idx_for_export, pseudo_color_toggle], outputs=[selected_well_folder, selected_well_label, stack_index, DIC_image, selected_well_markdown, selected_idx_for_export, well_gallery_06, page2_export_what_well]).then(
-        fn=update_Graph_and_Peak, inputs=[selected_well_label, cycle_auto_calc_text, stack_index], outputs=[ICD_graph, df_component]).then(fn=switch_page, inputs=[export_select_well_toggle_state], outputs=[page3, page2])
+    well_gallery_06.select(fn=on_gallery_select, inputs=[well_stack_mapping_path, original_gallery_image, overlay_gallery_image, stack_index, export_select_well_toggle_state, selected_idx_for_export, pseudo_color_toggle, SC_toggle, DC_toggle], outputs=[selected_well_folder, selected_well_label, stack_index, DIC_image, selected_well_markdown, selected_idx_for_export, well_gallery_06, page2_export_what_well]).then(
+        fn=update_Graph_and_Peak, inputs=[selected_well_folder, cycle_auto_calc_text, stack_index], outputs=[ICD_graph, df_component]).then(fn=switch_page, inputs=[export_select_well_toggle_state], outputs=[page3, page2])
     
-    well_gallery_12.select(fn=on_gallery_select, inputs=[well_stack_mapping_path, original_gallery_image, overlay_gallery_image, stack_index, export_select_well_toggle_state, selected_idx_for_export, pseudo_color_toggle], outputs=[selected_well_folder, selected_well_label, stack_index, DIC_image, selected_well_markdown, selected_idx_for_export, well_gallery_12, page2_export_what_well]).then(
-        fn=update_Graph_and_Peak, inputs=[selected_well_label, cycle_auto_calc_text, stack_index], outputs=[ICD_graph, df_component]).then(fn=switch_page, inputs=[export_select_well_toggle_state], outputs=[page3, page2])
+    well_gallery_12.select(fn=on_gallery_select, inputs=[well_stack_mapping_path, original_gallery_image, overlay_gallery_image, stack_index, export_select_well_toggle_state, selected_idx_for_export, pseudo_color_toggle, SC_toggle, DC_toggle], outputs=[selected_well_folder, selected_well_label, stack_index, DIC_image, selected_well_markdown, selected_idx_for_export, well_gallery_12, page2_export_what_well]).then(
+        fn=update_Graph_and_Peak, inputs=[selected_well_folder, cycle_auto_calc_text, stack_index], outputs=[ICD_graph, df_component]).then(fn=switch_page, inputs=[export_select_well_toggle_state], outputs=[page3, page2])
     
-    well_gallery_24.select(fn=on_gallery_select, inputs=[well_stack_mapping_path, original_gallery_image, overlay_gallery_image, stack_index, export_select_well_toggle_state, selected_idx_for_export, pseudo_color_toggle], outputs=[selected_well_folder, selected_well_label, stack_index, DIC_image, selected_well_markdown, selected_idx_for_export, well_gallery_24, page2_export_what_well]).then(
-        fn=update_Graph_and_Peak, inputs=[selected_well_label, cycle_auto_calc_text, stack_index], outputs=[ICD_graph, df_component]).then(fn=switch_page, inputs=[export_select_well_toggle_state], outputs=[page3, page2])
+    well_gallery_24.select(fn=on_gallery_select, inputs=[well_stack_mapping_path, original_gallery_image, overlay_gallery_image, stack_index, export_select_well_toggle_state, selected_idx_for_export, pseudo_color_toggle, SC_toggle, DC_toggle], outputs=[selected_well_folder, selected_well_label, stack_index, DIC_image, selected_well_markdown, selected_idx_for_export, well_gallery_24, page2_export_what_well]).then(
+        fn=update_Graph_and_Peak, inputs=[selected_well_folder, cycle_auto_calc_text, stack_index], outputs=[ICD_graph, df_component]).then(fn=switch_page, inputs=[export_select_well_toggle_state], outputs=[page3, page2])
     
-    well_gallery_96.select(fn=on_gallery_select, inputs=[well_stack_mapping_path, original_gallery_image, overlay_gallery_image, stack_index, export_select_well_toggle_state, selected_idx_for_export, pseudo_color_toggle], outputs=[selected_well_folder, selected_well_label, stack_index, DIC_image, selected_well_markdown, selected_idx_for_export, well_gallery_96, page2_export_what_well]).then(
-        fn=update_Graph_and_Peak, inputs=[selected_well_label, cycle_auto_calc_text, stack_index], outputs=[ICD_graph, df_component]).then(fn=switch_page, inputs=[export_select_well_toggle_state], outputs=[page3, page2])
+    well_gallery_96.select(fn=on_gallery_select, inputs=[well_stack_mapping_path, original_gallery_image, overlay_gallery_image, stack_index, export_select_well_toggle_state, selected_idx_for_export, pseudo_color_toggle, SC_toggle, DC_toggle], outputs=[selected_well_folder, selected_well_label, stack_index, DIC_image, selected_well_markdown, selected_idx_for_export, well_gallery_96, page2_export_what_well]).then(
+        fn=update_Graph_and_Peak, inputs=[selected_well_folder, cycle_auto_calc_text, stack_index], outputs=[ICD_graph, df_component]).then(fn=switch_page, inputs=[export_select_well_toggle_state], outputs=[page3, page2])
+   
    
 
 ############################
@@ -470,17 +491,21 @@ def main_page():
 ############################
 
     # 팝업 표시/숨김 버튼 콜백
-    page3_export_button.click(fn=show_popup, outputs=[page3_export_popup, page3_overlay]); page2_export_button.click(fn=show_popup, outputs=[page2_export_popup, page2_overlay])
+    page3_export_button.click(fn=show_popup, inputs=[gr.State(True)], outputs=[information_error_popup, page3_export_popup, page3_overlay]); page2_export_button.click(fn=show_popup, inputs=[gr.State(True)], outputs=[information_error_popup, page2_export_popup, page2_overlay])
     page3_save_button.click(fn=hide_popup, outputs=[page3_export_popup, page3_overlay]).then(fn=page3_export_data_save, inputs=[DIC_image, ICD_graph, stack_index, selected_well_label, selected_well_folder, page3_vis_main, page3_vis_format, page3_graph_main, page3_graph_format], outputs=[page3_vis_main, page3_vis_format, page3_graph_main, page3_graph_format])
 
 
     # # - Back 버튼 -> third_page_stack_index - 1 후 DIC 이미지 업데이트 + 그래프에서 점선 위치 변경
     page3_left_button.click(fn=prev_stack, inputs=stack_index, outputs=stack_index).then(fn=slider_position_change, inputs=[stack_index], outputs=[page3_time_slider]).then(fn=slider_position_change, inputs=[stack_index], outputs=[page2_time_slider]).then(
-        fn=update_DIC_image, inputs=[pseudo_color_toggle, selected_well_folder, stack_index], outputs=DIC_image).then(fn=update_Graph_and_Peak, inputs=[selected_well_label, cycle_auto_calc_text, stack_index], outputs=[ICD_graph, df_component])
+        fn=update_DIC_image, inputs=[pseudo_color_toggle, SC_toggle, DC_toggle, selected_well_folder, stack_index], outputs=DIC_image).then(fn=update_Graph_and_Peak, inputs=[selected_well_folder, cycle_auto_calc_text, stack_index], outputs=[ICD_graph, df_component])
 
     # # - Next 버튼 -> third_page_stack_index + 1 후 DIC 이미지 업데이트 + 그래프에서 점선 위치 변경
     page3_right_button.click(fn=next_stack, inputs=[stack_index, cycle_auto_calc_text], outputs=stack_index).then(fn=slider_position_change, inputs=[stack_index], outputs=[page3_time_slider]).then(fn=slider_position_change, inputs=[stack_index], outputs=[page2_time_slider]).then(
-        fn=update_DIC_image, inputs=[pseudo_color_toggle, selected_well_folder, stack_index], outputs=DIC_image).then(fn=update_Graph_and_Peak, inputs=[selected_well_label, cycle_auto_calc_text, stack_index], outputs=[ICD_graph, df_component])
+        fn=update_DIC_image, inputs=[pseudo_color_toggle, SC_toggle, DC_toggle, selected_well_folder, stack_index], outputs=DIC_image).then(fn=update_Graph_and_Peak, inputs=[selected_well_folder, cycle_auto_calc_text, stack_index], outputs=[ICD_graph, df_component])
     
     # psudo color가 토글 되면 GFP + RFP 병합된 이미지가 보여야한다.
-    pseudo_color_toggle.change(fn=merge_GFP_RFP, inputs=[pseudo_color_toggle, selected_well_folder, stack_index], outputs=[DIC_image]) # 현재 위치의 정보를 input으로 / output : 병합 이미지
+    pseudo_color_toggle.change(fn=update_DIC_image, inputs=[pseudo_color_toggle, SC_toggle, DC_toggle, selected_well_folder, stack_index], outputs=[DIC_image]) # 현재 위치의 정보를 input으로 / output : 병합 이미지
+    
+    # sc, dc 토글이 되면 해당 레이블이 보이도록 시각화 -> but, information에서 off로 한 정보는 무시돼야함
+    SC_toggle.change(fn=update_DIC_image, inputs=[pseudo_color_toggle, SC_toggle, DC_toggle, selected_well_folder, stack_index], outputs=[DIC_image])
+    DC_toggle.change(fn=update_DIC_image, inputs=[pseudo_color_toggle, SC_toggle, DC_toggle, selected_well_folder, stack_index], outputs=[DIC_image])
